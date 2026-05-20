@@ -495,5 +495,18 @@ function attachSwipe(el, handlers) {
 // ---------- Boot ----------
 navigate(state.loggedIn ? 'home' : 'login');
 
+// Hide splash once first screen is rendered, but hold it long enough to read.
+const splash = document.getElementById('splash');
+if (splash) {
+  const minVisible = 900;
+  const start = performance.timing?.navigationStart || performance.now();
+  const elapsed = performance.now() - (typeof start === 'number' ? 0 : start);
+  const wait = Math.max(0, minVisible - elapsed);
+  setTimeout(() => {
+    splash.classList.add('hide');
+    splash.addEventListener('transitionend', () => splash.remove(), { once: true });
+  }, wait);
+}
+
 // Expose for debugging
 window.__haka = { state, save, reset: () => { localStorage.removeItem(STORAGE_KEY); location.reload(); } };

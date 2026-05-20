@@ -1,0 +1,19 @@
+{
+  "name": "Haka!",
+  "short_name": "Haka!",
+  "description": "Pick your animal, tune its stats, and battle nearby opponents.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ec9d99",
+  "theme_color": "#6d4d8b",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}

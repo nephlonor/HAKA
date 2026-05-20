@@ -514,6 +514,56 @@ body {
 .modal .modal-actions button { padding: 8px 14px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); background: transparent; color: white; cursor: pointer; }
 .modal .modal-actions .primary { background: rgba(255,255,255,0.18); }
 
+/* ---------- Splash / logo ---------- */
+.splash {
+  position: fixed; inset: 0; z-index: 1000;
+  display: grid; place-items: center;
+  background:
+    radial-gradient(110% 80% at 0% 100%, #f6c89a 0%, transparent 55%),
+    radial-gradient(140% 100% at 100% 0%, #8e5fa5 0%, transparent 65%),
+    linear-gradient(135deg, #ec9d99 0%, #6d4d8b 100%);
+  opacity: 1;
+  transition: opacity 480ms ease;
+}
+.splash::after {
+  content: "";
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(135deg, rgba(0,0,0,0) 48%, rgba(0,0,0,0.18) 52%);
+}
+.splash.hide { opacity: 0; pointer-events: none; }
+.splash-eagle {
+  width: min(62vw, 360px);
+  animation: splash-in 700ms ease both;
+}
+.splash-eagle svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 12px 24px rgba(0,0,0,0.25)); }
+.splash-word {
+  position: absolute; bottom: 22%; left: 0; right: 0;
+  text-align: center;
+  color: #fff;
+  font-family: var(--font);
+  font-size: clamp(36px, 9vw, 64px);
+  font-weight: 200;
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.45);
+  animation: splash-in 700ms 120ms ease both;
+}
+.splash-credit {
+  position: absolute; bottom: 28px; left: 0; right: 0;
+  text-align: center;
+  color: rgba(255,255,255,0.85);
+  font-family: var(--font);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+}
+@keyframes splash-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-eagle, .splash-word { animation: none; }
+}
+
 /* fight result */
 .result {
   position: absolute; inset: 0; display: grid; place-items: center;
