@@ -1,7 +1,12 @@
 import { ANIMALS, TIERS } from './animals.js';
 
+// ---------- Constants ----------
+const ATTR_KEYS = ['speed', 'agility', 'intelligence', 'power', 'reflexes'];
+const MAX_ATTR = 100;
+const BUDGET = 250;
+
 // ---------- Persistent state ----------
-const STORAGE_KEY = 'haka:v1';
+const STORAGE_KEY = 'haka:v2';
 const defaultState = () => ({
   loggedIn: false,
   username: 'Steve_Hick',
@@ -11,7 +16,7 @@ const defaultState = () => ({
   wifi: false,
   location: false,
   selected: 'dragonfly',
-  attrs: { speed: 3, agility: 3, intelligence: 3, power: 3, reflexes: 3 },
+  attrs: { speed: 50, agility: 50, intelligence: 50, power: 50, reflexes: 50 },
   points: 15,
   matches: 0,
   wins: 0,
@@ -308,18 +313,62 @@ const morePoints = () => {
 };
 
 // ---------- ATTRIBUTES ----------
-const ATTR_KEYS = ['speed','agility','intelligence','power','reflexes'];
+// Drag one slider past the available budget and the rest of the sliders
+// shrink simultaneously to keep total ≤ BUDGET.
+const rebalanceAttrs = (changedKey, newValue) => {
+  newValue = Math.max(0, Math.min(MAX_ATTR, newValue));
+  const others = ATTR_KEYS.filter(k => k !== changedKey);
+  const otherSum = others.reduce((a, k) => a + state.attrs[k], 0);
+  let excess = newValue + otherSum - BUDGET;
+  state.attrs[changedKey] = newValue;
+  if (excess <= 0) return;
+
+  // Each pass, take from non-zero others proportionally to their share.
+  let guard = 0;
+  while (excess > 0 && guard++ < 12) {
+    const pool = others.reduce((a, k) => a + state.attrs[k], 0);
+    if (pool === 0) break;
+    let taken = 0;
+    for (const k of others) {
+      if (excess <= 0) break;
+      const share = state.attrs[k] / pool;
+      const grab = Math.min(state.attrs[k], Math.ceil(excess * share));
+      state.attrs[k] -= grab;
+      taken += grab;
+      excess -= grab;
+    }
+    if (taken === 0) break;
+  }
+};
+
+const syncSliderDom = () => {
+  for (const k of ATTR_KEYS) {
+    const el = document.querySelector(`.slider[data-key="${k}"]`);
+    if (el && +el.value !== state.attrs[k]) el.value = String(state.attrs[k]);
+    const v = document.querySelector(`.slider-row[data-key="${k}"] .val`);
+    if (v) v.textContent = state.attrs[k];
+  }
+  const tot = total();
+  const t = document.getElementById('attr-total');
+  if (t) t.textContent = tot;
+  const b = document.getElementById('attr-budget');
+  if (b) b.textContent = `${tot} / ${BUDGET}`;
+};
+
 routes.attributes = () => {
-  const row = (label, key) => h('div', { class: 'slider-row' },
-    h('div', { class: 'lbl' }, label),
+  const row = (label, key) => h('div', { class: 'slider-row', 'data-key': key },
+    h('div', { class: 'lbl' },
+      h('span', {}, label),
+      h('span', { class: 'val' }, String(state.attrs[key])),
+    ),
     h('input', {
-      class: 'slider', type: 'range', min: '0', max: '10', step: '1',
+      class: 'slider', type: 'range', min: '0', max: String(MAX_ATTR), step: '1',
       value: String(state.attrs[key]),
+      'data-key': key,
       oninput: (e) => {
-        state.attrs[key] = parseInt(e.target.value, 10);
+        rebalanceAttrs(key, parseInt(e.target.value, 10));
         save();
-        $('#attr-total').textContent = total();
-        $('#attr-budget').textContent = `${total()} / 50`;
+        syncSliderDom();
       }
     }),
   );
@@ -327,7 +376,7 @@ routes.attributes = () => {
     h('div', { class: 'bg teal' }),
     h('button', { class: 'gear', 'aria-label': 'home', onclick: () => navigate('home') },
       svgWrap(`<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="white" stroke-width="1.6"><path d="M5 15l7-7 7 7"/></svg>`)),
-    h('div', { class: 'attr-budget', id: 'attr-budget' }, `${total()} / 50`),
+    h('div', { class: 'attr-budget', id: 'attr-budget' }, `${total()} / ${BUDGET}`),
     h('div', { class: 'up', id: 'attr-total' }, String(total())),
     h('div', { class: 'watermark' }, svgWrap(ANIMALS[state.selected].svg())),
     h('div', { class: 'sliders' },
@@ -344,51 +393,98 @@ routes.attributes = () => {
 
 // ---------- BATTLE ----------
 const OPPONENTS = [
-  { name: 'FabioX14',  key: 'dragonfly', attrs: { speed: 4, agility: 5, intelligence: 3, power: 4, reflexes: 4 } },
-  { name: 'Reymondo',  key: 'mantaray',  attrs: { speed: 3, agility: 4, intelligence: 5, power: 6, reflexes: 4 } },
-  { name: 'Alice 98',  key: 'squid',     attrs: { speed: 5, agility: 5, intelligence: 4, power: 3, reflexes: 5 } },
-  { name: 'KaiBee',    key: 'bee',       attrs: { speed: 5, agility: 6, intelligence: 3, power: 3, reflexes: 5 } },
-  { name: 'Vipera',    key: 'snake',     attrs: { speed: 4, agility: 5, intelligence: 5, power: 4, reflexes: 6 } },
-  { name: 'Tane',      key: 'eagle',     attrs: { speed: 6, agility: 5, intelligence: 4, power: 5, reflexes: 5 } },
+  { name: 'FabioX14', key: 'dragonfly', attrs: null },
+  { name: 'Reymondo', key: 'mantaray',  attrs: null },
+  { name: 'Alice 98', key: 'squid',     attrs: null },
+  { name: 'KaiBee',   key: 'bee',       attrs: null },
+  { name: 'Vipera',   key: 'snake',     attrs: null },
+  { name: 'Tane',     key: 'eagle',     attrs: null },
 ];
 
+// Generate 5 attrs in [0..MAX_ATTR] summing close to `target` (default = BUDGET).
+const randomAttrs = (target = BUDGET) => {
+  // Dirichlet-style: pick 5 uniform reals, normalize, then round + repair.
+  const r = ATTR_KEYS.map(() => Math.random() + 0.15); // +0.15 to avoid extremes
+  const s = r.reduce((a, b) => a + b, 0);
+  const vals = r.map(x => Math.max(0, Math.min(MAX_ATTR, Math.round(x / s * target))));
+  let sum = vals.reduce((a, b) => a + b, 0);
+  // Repair rounding so sum lands on target
+  let safety = 50;
+  while (sum !== target && safety-- > 0) {
+    const dir = Math.sign(target - sum);
+    const i = Math.floor(Math.random() * vals.length);
+    const next = vals[i] + dir;
+    if (next >= 0 && next <= MAX_ATTR) { vals[i] = next; sum += dir; }
+  }
+  const out = {};
+  ATTR_KEYS.forEach((k, i) => { out[k] = vals[i]; });
+  return out;
+};
+
+const reshuffleOpponents = () => {
+  for (const o of OPPONENTS) {
+    // Vary the budget slightly so some opponents feel stronger/weaker.
+    o.attrs = randomAttrs(BUDGET + Math.floor((Math.random() - 0.5) * 40));
+  }
+};
+
 let oppIndex = 1;
+reshuffleOpponents();
 
 routes.battle = () => {
-  const oppDom = (offset) => {
-    const i = (oppIndex + offset + OPPONENTS.length) % OPPONENTS.length;
-    const o = OPPONENTS[i];
-    return h('div', { class: 'opp' + (offset === 0 ? ' active' : ''), onclick: () => { oppIndex = i; navigate('battle'); } },
-      svgWrap(ANIMALS[o.key].svg()),
-      h('div', { class: 'name' }, o.name),
-    );
-  };
-  const counter = () => h('div', { class: 'counter' },
+  reshuffleOpponents();
+  const track = h('div', { class: 'opp-track', id: 'opp-track' },
+    ...OPPONENTS.map((o, i) =>
+      h('div', { class: 'opp' + (i === oppIndex ? ' active' : ''), 'data-i': i,
+                 onclick: () => setOpp(i) },
+        svgWrap(ANIMALS[o.key].svg()),
+        h('div', { class: 'name' }, o.name),
+      )
+    ),
+  );
+  track.style.setProperty('--idx', oppIndex);
+  track.style.setProperty('--total', OPPONENTS.length);
+
+  const counter = h('div', { class: 'counter' },
     h('button', { class: 'bump', onclick: () => bump(-1) }, '−'),
     h('div', { class: 'num', id: 'battle-counter' }, String(state.points)),
     h('button', { class: 'bump', onclick: () => bump(1) }, '+'),
   );
+
   const screen = h('section', { class: 'screen battle' },
     h('div', { class: 'bg slate' }),
-    h('div', { class: 'opponents' },
-      h('div', { class: 'opp-track', id: 'opp-track' },
-        oppDom(-1), oppDom(0), oppDom(1),
-      ),
-    ),
+    h('div', { class: 'opponents' }, track),
     h('div', { class: 'arena' },
       h('button', { class: 'fight', onclick: fight }, 'FIGHT'),
-      counter(),
+      counter,
       h('div', { class: 'my-animal' }, svgWrap(ANIMALS[state.selected].svg())),
       h('div', { class: 'swipe-hint' }, '⌄'),
     ),
   );
   view.appendChild(screen);
+
   attachSwipe(screen, {
     down: () => navigate('roster'),
     up:   () => navigate('home'),
-    left: () => { oppIndex = (oppIndex + 1) % OPPONENTS.length; navigate('battle'); },
-    right:() => { oppIndex = (oppIndex - 1 + OPPONENTS.length) % OPPONENTS.length; navigate('battle'); },
+    left: () => setOpp((oppIndex + 1) % OPPONENTS.length),
+    right:() => setOpp((oppIndex - 1 + OPPONENTS.length) % OPPONENTS.length),
   });
+
+  // Carousel swipe inside the opponents strip (separate from full-screen swipe)
+  attachSwipe($('.opponents', screen), {
+    left:  () => setOpp((oppIndex + 1) % OPPONENTS.length),
+    right: () => setOpp((oppIndex - 1 + OPPONENTS.length) % OPPONENTS.length),
+  });
+};
+
+const setOpp = (i) => {
+  oppIndex = i;
+  const track = document.getElementById('opp-track');
+  if (!track) return;
+  track.style.setProperty('--idx', oppIndex);
+  for (const el of track.querySelectorAll('.opp')) {
+    el.classList.toggle('active', +el.dataset.i === oppIndex);
+  }
 };
 
 const bump = (d) => {
@@ -399,37 +495,92 @@ const bump = (d) => {
   $('#battle-counter').textContent = state.points;
 };
 
+let battling = false;
+
 const fight = () => {
+  if (battling) return;
   if (!state.bluetooth && !state.wifi) {
     toast('Enable Bluetooth or WiFi in Settings');
     return;
   }
-  const me = score(state.attrs);
+  battling = true;
   const opp = OPPONENTS[oppIndex];
-  const them = score(opp.attrs);
-  const meRoll = me + Math.random() * 8;
-  const themRoll = them + Math.random() * 8;
-  const won = meRoll >= themRoll;
-  state.matches += 1;
-  if (won) {
-    state.wins += 1;
-    state.points += 5;
-  } else {
-    state.points = Math.max(0, state.points - 2);
-  }
-  state.history.push(state.points);
-  save();
-  showResult(won, opp.name, meRoll, themRoll);
+  opp.attrs = randomAttrs(BUDGET + Math.floor((Math.random() - 0.5) * 40));
+  runCountdown(() => {
+    battling = false;
+    revealOutcome(opp);
+  });
 };
 
-const score = (a) => a.speed + a.agility + a.intelligence + a.power + a.reflexes;
+const runCountdown = (done) => {
+  const overlay = h('div', { class: 'countdown' },
+    h('div', { class: 'count' }, '3'),
+  );
+  $('#phone').appendChild(overlay);
+  const seq = ['3', '2', '1', 'FIGHT!'];
+  let i = 0;
+  const slot = overlay.querySelector('.count');
+  const tick = () => {
+    slot.textContent = seq[i];
+    slot.classList.remove('pulse');
+    void slot.offsetWidth; // restart animation
+    slot.classList.add('pulse');
+    i++;
+    if (i < seq.length) setTimeout(tick, 700);
+    else setTimeout(() => { overlay.remove(); done(); }, 650);
+  };
+  tick();
+};
 
-const showResult = (won, oppName, my, their) => {
+const revealOutcome = (opp) => {
+  const detail = ATTR_KEYS.map(k => {
+    const mine = state.attrs[k], theirs = opp.attrs[k];
+    return { k, mine, theirs, win: mine > theirs, tie: mine === theirs };
+  });
+  const wins = detail.filter(d => d.win).length;
+  const losses = detail.filter(d => !d.win && !d.tie).length;
+  const ties = detail.filter(d => d.tie).length;
+  const won = wins > losses;
+
+  state.matches += 1;
+  if (won) { state.wins += 1; state.points += 5; }
+  else if (wins === losses) { /* tie: no change */ }
+  else { state.points = Math.max(0, state.points - 2); }
+  state.history.push(state.points);
+  save();
+  $('#battle-counter') && ($('#battle-counter').textContent = state.points);
+
+  showResult({ won, ties, oppName: opp.name, wins, losses, detail });
+};
+
+const labelFor = {
+  speed: 'SPEED', agility: 'AGILITY', intelligence: 'INTELLIGENCE',
+  power: 'POWER', reflexes: 'REFLEXES',
+};
+
+const showResult = ({ won, ties, oppName, wins, losses, detail }) => {
+  const verdict = wins === losses ? 'Draw' : (won ? 'Victory' : 'Defeat');
+  const summary = wins === losses
+    ? `${wins} – ${losses} (${ties} tied)`
+    : `You won ${wins} of ${ATTR_KEYS.length} sliders`;
+
+  const rows = detail.map(({ k, mine, theirs, win, tie }) => {
+    const mark = tie ? '–' : (win ? '▶' : '◀');
+    return h('div', { class: 'rrow ' + (tie ? 'tie' : (win ? 'win' : 'loss')) },
+      h('div', { class: 'rk' }, labelFor[k]),
+      h('div', { class: 'rmine' }, String(mine)),
+      h('div', { class: 'rsep' }, mark),
+      h('div', { class: 'rtheir' }, String(theirs)),
+    );
+  });
+
   const card = h('div', { class: 'result', onclick: (e) => { if (e.target.classList.contains('result')) card.remove(); } },
     h('div', { class: 'card' },
-      h('div', { class: 'verdict' }, won ? 'Victory' : 'Defeat'),
-      h('div', { class: 'detail' }, `vs ${oppName} · ${my.toFixed(1)} – ${their.toFixed(1)}`),
-      h('button', { class: 'cta', onclick: () => { card.remove(); navigate('battle'); } }, 'Continue'),
+      h('div', { class: 'verdict ' + verdict.toLowerCase() }, verdict),
+      h('div', { class: 'opp-name' }, `vs ${oppName}`),
+      h('div', { class: 'summary' }, summary),
+      h('div', { class: 'rows' }, ...rows),
+      h('button', { class: 'cta continue', onclick: () => { card.remove(); navigate('battle'); } }, 'Continue'),
     ),
   );
   $('#phone').appendChild(card);
